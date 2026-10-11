@@ -1,0 +1,81 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: vet, staticcheck, race tests, the README's demo, no raw values in output
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+      - run: test -z "$(gofmt -l .)"
+      - run: go vet ./...
+      - run: go install honnef.co/go/tools/cmd/staticcheck@latest && staticcheck ./...
+      # On Linux the symlink test runs; on the Windows machine this was written on it skips.
+      - run: go test -race -short -count=1 ./...
+      # Timing-based, so run without the race detector's 10x slowdown.
+      - name: adversarial lines must scale linearly
+        run: go test -count=1 -run Pathological ./internal/detect
+      - run: go build -o bin/piisweep ./cmd/piisweep
+      - name: the README's demo must be what the binary prints
+        run: ./scripts/check-readme.sh
+      - name: no raw value from the fixture may appear in any output
+        run: |
+          for mode in "" "--json" "--summary" "--min-confidence low"; do
+            ./bin/piisweep testdata/app.log $mode > /tmp/out.txt || true
+            for raw in DE21757540057005398270 "DE21 7575 4005 7005 3982 70" "4755 5457 3301 8306" \
+                       jane.doe@piisweep-demo.eu 93329102R "2 91 07 75 123 456 52" "99 00 12 34"; do
+              if grep -qF "$raw" /tmp/out.txt; then echo "raw value in output ($mode): $raw" >&2; exit 1; fi
+            done
+          done
+      - name: UTF-16 and gzip inputs are read
+        run: |
+          iconv -f UTF-8 -t UTF-16 testdata/app.log > /tmp/app16.log
+          gzip -c testdata/app.log > /tmp/app.log.gz
+          for f in /tmp/app16.log /tmp/app.log.gz; do
+            n=$(./bin/piisweep "$f" --json | python3 -c 'import json,sys; print(len(json.load(sys.stdin)["findings"]))')
+            test "$n" = 6 || { echo "$f: $n findings, want 6" >&2; exit 1; }
+          done
+
+  fuzz:
+    name: fuzz the detectors for 60 seconds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+      - run: go test -run '^$' -fuzz '^FuzzFind$' -fuzztime 60s ./internal/detect
+
+  secrets:
+    name: credsweep over the full commit history
+    runs-on: ubuntu-latest
+    steps:
+      # A shallow clone would let credsweep report a false all-clear.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+      - run: go install github.com/sriharifortitude/credsweep/cmd/credsweep@v0.1.3
+      - run: credsweep scan .

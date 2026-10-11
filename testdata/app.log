@@ -1,0 +1,9 @@
+2026-10-11T09:14:02Z INFO  GET /api/orders/88412 200 41ms client=10.20.1.7
+2026-10-11T09:14:05Z INFO  signup email=jane.doe@piisweep-demo.eu plan=pro
+2026-10-11T09:14:09Z WARN  payment declined card=4755 5457 3301 8306 reason=insufficient_funds
+2026-10-11T09:14:11Z INFO  payout iban=DE21 7575 4005 7005 3982 70 amount=120.00
+2026-10-11T09:14:15Z DEBUG kyc dni=93329102R verified=true
+2026-10-11T09:14:18Z DEBUG dossier nir=2 91 07 75 123 456 52 statut=ouvert
+2026-10-11T09:14:20Z INFO  callback tel=+33 1 99 00 12 34 from 185.199.108.153
+2026-10-11T09:14:24Z INFO  sandbox charge card=4111 1111 1111 1111 ok
+2026-10-11T09:14:30Z INFO  order 2026101100042 total=59.90 EUR ref=7Q2K9F
